@@ -1,0 +1,169 @@
+{
+  "name": "Kill AnyDesk V2",
+  "nodes": [
+    {
+      "id": "da7b7674-2156-45dd-af07-14b4b8fd9e76",
+      "name": "Escolher destino",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Matador de AnyDesk V2",
+        "formDescription": "Envia KILL_ANYDESK para a fila privada do agente. A confirmação significa apenas que o comando foi enfileirado.",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "target",
+              "fieldLabel": "De qual PC matar?",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "jcpc38"
+                  },
+                  {
+                    "option": "vitordesktopwin11"
+                  },
+                  {
+                    "option": "TODOS"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "path": "anydeskkiller-v2",
+          "buttonLabel": "Enfileirar comando",
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "8767f930-49e4-49ae-abf3-52057d66c36e"
+    },
+    {
+      "id": "8db7a774-e053-423a-862e-9738cae84d62",
+      "name": "Criar comandos permitidos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const target = $input.first().json.target;\nconst targets = target === 'TODOS' ? ['jcpc38', 'vitordesktopwin11'] : [target];\nconst requestedAt = new Date().toISOString();\nconst expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();\nconst correlationId = crypto.randomUUID();\nreturn targets.map((machineId) => ({ json: { queue: 'remote-agent:commands:' + machineId, command: { version: 1, commandId: crypto.randomUUID(), correlationId, target: machineId, action: 'KILL_ANYDESK', args: {}, requestedAt, expiresAt, requestedBy: 'n8n' } } }));"
+      }
+    },
+    {
+      "id": "afc579c9-c4ad-488d-82a3-962d3fc11db1",
+      "name": "LPUSH na fila privada",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        780,
+        300
+      ],
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $json.queue }}",
+        "messageData": "={{ JSON.stringify($json.command) }}",
+        "tail": false
+      }
+    },
+    {
+      "id": "cbaa0e6d-db44-4483-b410-96e5cf0e5ca9",
+      "name": "Confirmar enfileiramento",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "enqueued",
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "Comando enfileirado. O agente executará quando estiver conectado.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dc996eec-b85b-49c9-81d4-9443ce7f44bb",
+      "name": "Sticky Note 9da8508b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        210,
+        250
+      ],
+      "parameters": {
+        "content": "## V2 — Fila Redis privada\nO formulário somente enfileira comandos permitidos. O Redis deve continuar privado; configure a credencial Redis private VPS para acessar a instância local do n8n.",
+        "color": 5,
+        "width": 1080,
+        "height": 200
+      }
+    }
+  ],
+  "connections": {
+    "Escolher destino": {
+      "main": [
+        [
+          {
+            "node": "Criar comandos permitidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar comandos permitidos": {
+      "main": [
+        [
+          {
+            "node": "LPUSH na fila privada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LPUSH na fila privada": {
+      "main": [
+        [
+          {
+            "node": "Confirmar enfileiramento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "meta": {
+    "sourceWorkflowId": "kFA0bCIR7BeadTUA",
+    "exportedAt": "2026-07-27T17:48:09.860Z"
+  }
+}
