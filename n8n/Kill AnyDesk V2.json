@@ -34,12 +34,17 @@
                   }
                 ]
               }
+            },
+            {
+              "fieldName": "reopenAnyDesk",
+              "fieldLabel": "Abrir o AnyDesk novamente",
+              "fieldType": "checkbox"
             }
           ]
         },
         "responseMode": "lastNode",
         "options": {
-          "path": "anydeskkiller-v2",
+          "path": "remote",
           "buttonLabel": "Enfileirar comando",
           "appendAttribution": false
         }
@@ -57,7 +62,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const target = $input.first().json.target;\nconst targets = target === 'TODOS' ? ['jcpc38', 'vitordesktopwin11'] : [target];\nconst requestedAt = new Date().toISOString();\nconst expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();\nconst correlationId = crypto.randomUUID();\nreturn targets.map((machineId) => ({ json: { queue: 'remote-agent:commands:' + machineId, command: { version: 1, commandId: crypto.randomUUID(), correlationId, target: machineId, action: 'KILL_ANYDESK', args: {}, requestedAt, expiresAt, requestedBy: 'n8n' } } }));"
+        "jsCode": "const form = $input.first().json;\nconst target = form.target;\nconst targets = target === 'TODOS' ? ['jcpc38', 'vitordesktopwin11'] : [target];\nconst reopenAnyDesk = form.reopenAnyDesk === true || form.reopenAnyDesk === 'true';\nconst requestedAt = new Date().toISOString();\nconst expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();\n\nfunction uuidV4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {\n    const value = Math.floor(Math.random() * 16);\n    return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);\n  });\n}\n\nconst correlationId = uuidV4();\nconst args = reopenAnyDesk ? { reopenAnyDesk: true } : {};\n\nreturn targets.map((machineId) => ({\n  json: {\n    queue: 'remote-agent:commands:' + machineId,\n    command: {\n      version: 1,\n      commandId: uuidV4(),\n      correlationId,\n      target: machineId,\n      action: 'KILL_ANYDESK',\n      args,\n      requestedAt,\n      expiresAt,\n      requestedBy: 'n8n',\n    },\n  },\n}));"
       }
     },
     {
@@ -164,6 +169,6 @@
   },
   "meta": {
     "sourceWorkflowId": "kFA0bCIR7BeadTUA",
-    "exportedAt": "2026-07-27T17:48:09.860Z"
+    "exportedAt": "2026-07-27T23:51:58.718Z"
   }
 }
