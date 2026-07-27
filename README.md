@@ -8,8 +8,25 @@ V2 uses an n8n form to enqueue an allowlisted `KILL_ANYDESK` command in a privat
 - `agent/kill_anydesk_agent.pyw`: Windows agent.
 - `agent/config.example.json`: safe configuration template.
 - `agent/requirements.txt`: Python dependencies.
+- `agent-go/`: Go implementation of the Windows agent (recommended for deployment).
+- `.github/workflows/agent-go.yml`: CI for every push/PR; versioned Releases only for `v*` tags.
 
-## Install the agent
+## Install the Go agent (recommended)
+
+1. Create a restricted SSH user on the VPS and generate a dedicated key pair.
+2. Copy the private key and a verified `known_hosts` file to the computer. Never leave `knownHosts` empty.
+3. Copy `agent/config.example.json` to a local `config.json`, set the `machineId`, and keep it out of Git.
+4. Download `anydesk-killer-agent-windows-amd64.zip` from a [GitHub Release](https://github.com/vitorhugo-dotnet/anydesk-killer-remote/releases), extract it, then run:
+
+   ```powershell
+   .\anydesk-killer-agent-windows-amd64.exe --config C:\AnyDeskKiller\config.json
+   ```
+
+The executable accepts only an unexpired, version-1 `KILL_ANYDESK` envelope targeted to its configured machine ID. There is no generic shell or remote-command execution path.
+
+To publish a new binary, push a tag such as `v1.0.0`. The Release includes a ZIP and its SHA-256 checksum. Normal pushes and pull requests only run validation/build and upload a temporary Actions artifact.
+
+## Python MVP agent
 
 1. Create a restricted SSH user on the VPS and generate a dedicated key pair.
 2. Copy the private key and a verified `known_hosts` file to the computer. Never use `known_hosts: null`.
