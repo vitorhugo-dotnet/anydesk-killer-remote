@@ -1,0 +1,5 @@
+agent/config.json
+agent/keys/
+agent/logs/
+__pycache__/
+*.py[cod]
