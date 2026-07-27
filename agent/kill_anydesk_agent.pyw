@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
@@ -94,8 +96,11 @@ def validate_command(raw: str, machine_id: str) -> dict[str, Any]:
         raise ValueError("message target does not match this machine")
     if command.get("action") != ALLOWED_ACTION:
         raise ValueError("action is not allowed")
-    if command.get("args") != {}:
+    args = command.get("args")
+    if not isinstance(args, dict) or set(args) - {"reopenAnyDesk"}:
         raise ValueError("arguments are not allowed for this action")
+    if "reopenAnyDesk" in args and not isinstance(args["reopenAnyDesk"], bool):
+        raise ValueError("reopenAnyDesk must be a boolean")
 
     requested_at = parse_utc(command["requestedAt"])
     expires_at = parse_utc(command["expiresAt"])
@@ -127,6 +132,19 @@ def kill_anydesk() -> dict[str, int]:
             continue
 
     return {"matched": len(matched), "forceKilled": len(alive)}
+
+
+def reopen_anydesk() -> bool:
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\\Program Files")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "AnyDesk" / "AnyDesk.exe",
+    ]
+    for executable in candidates:
+        if executable.is_file():
+            subprocess.Popen([str(executable)], close_fds=True)
+            return True
+    return False
 
 
 async def publish(redis: Redis, queue: str, payload: dict[str, Any]) -> None:
@@ -169,6 +187,9 @@ async def consume(config: Config, logger: logging.Logger) -> None:
                     try:
                         command = validate_command(raw, config.machine_id)
                         outcome = kill_anydesk()
+                        reopen_requested = command["args"].get("reopenAnyDesk", False)
+                        outcome["reopenAttempted"] = reopen_requested and outcome["matched"] > 0
+                        outcome["reopened"] = reopen_anydesk() if outcome["reopenAttempted"] else False
                         result = {
                             "commandId": command["commandId"],
                             "correlationId": command["correlationId"],
