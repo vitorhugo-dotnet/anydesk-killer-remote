@@ -170,21 +170,29 @@ sudo sshd -T \
 
 ### 6. Register and verify `known_hosts`
 
-On the VPS, display the host-key fingerprint:
+On the VPS, display every enabled host-key fingerprint:
 
 ```bash
 sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
+sudo ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub
 ```
 
-On Windows, collect the public host key:
+On Windows, collect the public host keys. For a non-default SSH port, OpenSSH stores the host as `[hostname]:port`:
 
 ```powershell
-ssh-keyscan -p 2222 ssh.hugojava.dev | Out-File `
-  -Encoding ascii `
-  -Append "$env:USERPROFILE\.ssh\known_hosts"
+$knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
+
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+New-Item -ItemType File -Force $knownHosts | Out-Null
+
+ssh-keyscan -p 2222 -t ed25519,ecdsa,rsa ssh.hugojava.dev 2>$null |
+  Add-Content -Encoding ascii $knownHosts
+
+ssh-keygen -F "[ssh.hugojava.dev]:2222" -f $knownHosts
 ```
 
-Compare the collected key with the fingerprint obtained directly from the VPS before trusting it. `ssh-keyscan` alone does not authenticate the server.
+Compare every collected key with the fingerprints obtained directly from the VPS before trusting it. `ssh-keyscan` alone does not authenticate the server.
 
 ### 7. Configure the agent
 
@@ -208,7 +216,7 @@ Example `config.json`:
 }
 ```
 
-`clientKey` must reference the private key and must not end in `.pub`.
+`clientKey` must reference the private key and must not end in `.pub`. `knownHosts` must reference the `known_hosts` file itself, not the `.ssh` directory.
 
 ### 8. Test the tunnel manually
 
@@ -270,6 +278,82 @@ The Go agent currently treats paths from `config.json` literally. It does not ex
 ```
 
 The same rule applies to `clientKey` and `logFile`.
+
+#### `transport failure ... read C:/Users/.../.ssh: Incorrect function.`
+
+`knownHosts` points to a directory instead of the `known_hosts` file. Use the complete file path:
+
+```json
+"knownHosts": "C:\\Users\\vitor\\.ssh\\known_hosts"
+```
+
+Incorrect:
+
+```json
+"knownHosts": "C:\\Users\\vitor\\.ssh"
+```
+
+Create the file when it does not exist:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+New-Item -ItemType File -Force "$env:USERPROFILE\.ssh\known_hosts" | Out-Null
+```
+
+#### `knownhosts: key is unknown` or `knownhosts: key mismatch`
+
+The `known_hosts` file is readable, but it either has no entry for the configured host and port or contains only a different host-key algorithm. Remove stale entries and collect all host-key types enabled by the server:
+
+```powershell
+$knownHosts = "$env:USERPROFILE\.ssh\known_hosts"
+
+ssh-keygen -R "[ssh.hugojava.dev]:2222" -f $knownHosts
+
+ssh-keyscan -p 2222 -t ed25519,ecdsa,rsa ssh.hugojava.dev 2>$null |
+  Add-Content -Encoding ascii $knownHosts
+
+ssh-keygen -F "[ssh.hugojava.dev]:2222" -f $knownHosts
+```
+
+Before accepting the replacement, verify the fingerprints directly on the VPS:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
+sudo ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub
+```
+
+Do not blindly replace a previously trusted key. An unexpected host-key change may indicate a rebuilt server, a changed SSH endpoint, or a man-in-the-middle attack.
+
+#### `WARNING: UNPROTECTED PRIVATE KEY FILE!` or `Permissions ... are too open`
+
+Windows OpenSSH rejects private keys inherited by broad groups such as `Authenticated Users`, `Users`, or `Everyone`. Open PowerShell as Administrator and restrict the file to the current user:
+
+```powershell
+$key = "C:\AnyDeskKiller\anydesk-killer-redis"
+$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+
+icacls $key /setowner "$user"
+icacls $key /inheritance:r
+icacls $key /remove:g "*S-1-5-11" "*S-1-5-32-545" "*S-1-1-0"
+icacls $key /grant:r "${user}:(R)"
+```
+
+Replace `$key` with the actual private-key path and verify the resulting ACL:
+
+```powershell
+icacls $key
+```
+
+Then test authentication manually:
+
+```powershell
+ssh -p 2222 `
+  -i $key `
+  remote-agent@ssh.hugojava.dev
+```
+
+The SSH account may reject shell creation because it is intentionally tunnel-only. That is expected; the private key must no longer be rejected for open permissions.
 
 #### `Permission denied (publickey)`
 
@@ -369,6 +453,8 @@ A container shown only as `6379/tcp` is not published to the host. The expected 
 
 - [OpenSSH `sshd(8)`](https://man.openbsd.org/sshd.8)
 - [OpenSSH `sshd_config(5)`](https://man.openbsd.org/sshd_config)
+- [Windows OpenSSH key management](https://learn.microsoft.com/windows-server/administration/openssh/openssh_keymanagement)
+- [Windows `icacls`](https://learn.microsoft.com/windows-server/administration/windows-commands/icacls)
 - [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
 - [Ubuntu `adduser(8)`](https://manpages.ubuntu.com/manpages/noble/man8/adduser.8.html)
 
