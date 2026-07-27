@@ -1,0 +1,228 @@
+{
+  "name": "Workflow Sync — Manage Mapping",
+  "nodes": [
+    {
+      "id": "6b9d8031-d44e-4678-a4cc-f6387352f7c4",
+      "name": "Cadastrar mapeamento",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Workflow Git Sync — Novo mapeamento",
+        "formDescription": "Cria um destino de sincronização. Somente repositórios vitorhugo-dotnet/* são aceitos.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Workflow ID",
+              "fieldType": "text",
+              "fieldName": "workflowId",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Workflow name",
+              "fieldType": "text",
+              "fieldName": "workflowName",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Repository",
+              "fieldType": "text",
+              "fieldName": "repository",
+              "placeholder": "vitorhugo-dotnet/repository",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Branch",
+              "fieldType": "text",
+              "fieldName": "branch",
+              "defaultValue": "main",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "JSON file path",
+              "fieldType": "text",
+              "fieldName": "filePath",
+              "placeholder": "n8n/My Workflow.json",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "path": "workflow-git-sync-mapping",
+          "buttonLabel": "Salvar mapeamento",
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "69bb491f-f58f-4edc-952e-0537a45f1e93"
+    },
+    {
+      "id": "e070cca8-3a5f-419d-8cd2-cecfb6ba6252",
+      "name": "Validar e preparar mapeamento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst repository = String(item.repository ?? '').trim();\nconst workflowId = String(item.workflowId ?? '').trim();\nconst workflowName = String(item.workflowName ?? '').trim();\nconst branch = String(item.branch ?? '').trim();\nconst filePath = String(item.filePath ?? '').trim();\nif (!/^vitorhugo-dotnet\\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Repository must belong to vitorhugo-dotnet.');\nif (!workflowId || !workflowName || !branch || !filePath || !filePath.endsWith('.json') || filePath.startsWith('/') || filePath.includes('..')) throw new Error('Invalid workflow mapping.');\nreturn [{ json: { workflowId, workflowName, repository, branch, filePath, enabled: true, status: 'PENDING_BASELINE', lastN8nHash: '', lastGitHubSha: '', conflictN8nHash: '', conflictGitHubSha: '', resolution: '', lastError: '' } }];"
+      }
+    },
+    {
+      "id": "5188a81b-f3fe-42b5-ace3-a1ef611fbc34",
+      "name": "Salvar mapeamento",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        940,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "l9bLgEA1HAK18nL0",
+          "cachedResultName": "Workflow Git Sync"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflowId": "={{ $json.workflowId }}",
+            "workflowName": "={{ $json.workflowName }}",
+            "repository": "={{ $json.repository }}",
+            "branch": "={{ $json.branch }}",
+            "filePath": "={{ $json.filePath }}",
+            "enabled": "={{ $json.enabled }}",
+            "status": "={{ $json.status }}",
+            "lastN8nHash": "={{ $json.lastN8nHash }}",
+            "lastGitHubSha": "={{ $json.lastGitHubSha }}",
+            "conflictN8nHash": "={{ $json.conflictN8nHash }}",
+            "conflictGitHubSha": "={{ $json.conflictGitHubSha }}",
+            "resolution": "={{ $json.resolution }}",
+            "lastError": "={{ $json.lastError }}"
+          },
+          "schema": [
+            {
+              "id": "workflowId",
+              "displayName": "workflowId",
+              "type": "string"
+            },
+            {
+              "id": "workflowName",
+              "displayName": "workflowName",
+              "type": "string"
+            },
+            {
+              "id": "repository",
+              "displayName": "repository",
+              "type": "string"
+            },
+            {
+              "id": "branch",
+              "displayName": "branch",
+              "type": "string"
+            },
+            {
+              "id": "filePath",
+              "displayName": "filePath",
+              "type": "string"
+            },
+            {
+              "id": "enabled",
+              "displayName": "enabled",
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "lastN8nHash",
+              "displayName": "lastN8nHash",
+              "type": "string"
+            },
+            {
+              "id": "lastGitHubSha",
+              "displayName": "lastGitHubSha",
+              "type": "string"
+            },
+            {
+              "id": "conflictN8nHash",
+              "displayName": "conflictN8nHash",
+              "type": "string"
+            },
+            {
+              "id": "conflictGitHubSha",
+              "displayName": "conflictGitHubSha",
+              "type": "string"
+            },
+            {
+              "id": "resolution",
+              "displayName": "resolution",
+              "type": "string"
+            },
+            {
+              "id": "lastError",
+              "displayName": "lastError",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b89d750e-3942-4aee-b882-d0fc19b223ca",
+      "name": "Sticky Note bbefac61",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        210,
+        250
+      ],
+      "parameters": {
+        "content": "## Mapeamentos\nUm mapeamento representa um workflow enviado para um repositório/caminho. O mesmo workflow pode ter vários destinos.",
+        "color": 5,
+        "width": 980,
+        "height": 200
+      }
+    }
+  ],
+  "connections": {
+    "Cadastrar mapeamento": {
+      "main": [
+        [
+          {
+            "node": "Validar e preparar mapeamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar e preparar mapeamento": {
+      "main": [
+        [
+          {
+            "node": "Salvar mapeamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "description": "Protected form to register a workflow-to-GitHub mapping in the Workflow Git Sync Data Table."
+}
