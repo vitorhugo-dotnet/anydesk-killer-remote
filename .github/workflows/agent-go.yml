@@ -24,9 +24,14 @@ jobs:
         run: go mod tidy
       - name: Verify Go modules
         run: go mod verify
-      - run: go vet ./...
-      - run: go test ./...
-      - run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/anydesk-killer-agent-windows-amd64.exe .
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build Windows agent
+        run: |
+          mkdir -p ../dist
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/anydesk-killer-agent-windows-amd64.exe .
       - uses: actions/upload-artifact@v4
         with:
           name: anydesk-killer-agent-windows-amd64
@@ -36,30 +41,40 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    defaults:
-      run:
-        working-directory: agent-go
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: "1.24.x"
-          cache: false
-      - name: Tidy Go modules
-        run: go mod tidy
-      - name: Verify Go modules
-        run: go mod verify
-      - run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/anydesk-killer-agent-windows-amd64.exe .
-      - run: |
-          cd ../dist
+          name: anydesk-killer-agent-windows-amd64
+          path: dist
+      - name: Package release files
+        run: |
+          cd dist
           zip anydesk-killer-agent-windows-amd64.zip anydesk-killer-agent-windows-amd64.exe
-          sha256sum anydesk-killer-agent-windows-amd64.zip > anydesk-killer-agent-windows-amd64.zip.sha256
-      - name: Create release
+          sha256sum anydesk-killer-agent-windows-amd64.exe anydesk-killer-agent-windows-amd64.zip > checksums.sha256
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" ../dist/anydesk-killer-agent-windows-amd64.zip ../dist/anydesk-killer-agent-windows-amd64.zip.sha256 --generate-notes --title "$GITHUB_REF_NAME"
+          RELEASE_TAG: v0.0.${{ github.run_number }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              dist/anydesk-killer-agent-windows-amd64.exe \
+              dist/anydesk-killer-agent-windows-amd64.zip \
+              dist/checksums.sha256 \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" \
+              dist/anydesk-killer-agent-windows-amd64.exe \
+              dist/anydesk-killer-agent-windows-amd64.zip \
+              dist/checksums.sha256 \
+              --target "$GITHUB_SHA" \
+              --generate-notes \
+              --title "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
