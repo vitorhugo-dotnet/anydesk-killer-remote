@@ -22,7 +22,7 @@ V2 uses an n8n form to enqueue an allowlisted `KILL_ANYDESK` command in a privat
    .\anydesk-killer-agent-windows-amd64.exe --config C:\AnyDeskKiller\config.json
    ```
 
-The executable accepts only an unexpired, version-1 `KILL_ANYDESK` envelope targeted to its configured machine ID. There is no generic shell or remote-command execution path.
+The executable accepts only an unexpired, version-1 `KILL_ANYDESK` envelope targeted to its configured machine ID. The only optional argument is `reopenAnyDesk: true`; when set, it starts AnyDesk from known local paths only after it terminated at least one process. There is no generic shell or remote-command execution path.
 
 To publish a new binary, push a tag such as `v1.0.0`. The Release includes a ZIP and its SHA-256 checksum. Normal pushes and pull requests only run validation/build and upload a temporary Actions artifact.
 
