@@ -1,0 +1,15 @@
+{
+  "machineId": "jcpc38",
+  "ssh": {
+    "host": "your-vps.example.com",
+    "port": 22,
+    "username": "remote-agent",
+    "clientKey": "C:/AnyDeskKiller/keys/id_ed25519",
+    "knownHosts": "C:/AnyDeskKiller/keys/known_hosts"
+  },
+  "redis": {
+    "remoteHost": "127.0.0.1",
+    "remotePort": 6379
+  },
+  "logFile": "C:/AnyDeskKiller/logs/agent.log"
+}
