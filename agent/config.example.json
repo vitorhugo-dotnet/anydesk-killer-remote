@@ -9,7 +9,8 @@
   },
   "redis": {
     "remoteHost": "127.0.0.1",
-    "remotePort": 6379
+    "remotePort": 6379,
+    "database": 3
   },
   "logFile": "C:/AnyDeskKiller/logs/agent.log"
 }
