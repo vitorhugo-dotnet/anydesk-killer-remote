@@ -28,14 +28,18 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
-      - name: Build Windows agent
+      - name: Build Windows agent package
         run: |
           mkdir -p ../dist
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/anydesk-killer-agent-windows-amd64.exe .
+          cp windows/install-startup.bat ../dist/
+          cp windows/uninstall-startup.bat ../dist/
+          cp windows/run-agent-hidden.vbs ../dist/
+          cp ../agent/config.example.json ../dist/config.example.json
       - uses: actions/upload-artifact@v4
         with:
           name: anydesk-killer-agent-windows-amd64
-          path: dist/anydesk-killer-agent-windows-amd64.exe
+          path: dist/
           if-no-files-found: error
           retention-days: 14
 
@@ -54,8 +58,20 @@ jobs:
       - name: Package release files
         run: |
           cd dist
-          zip anydesk-killer-agent-windows-amd64.zip anydesk-killer-agent-windows-amd64.exe
-          sha256sum anydesk-killer-agent-windows-amd64.exe anydesk-killer-agent-windows-amd64.zip > checksums.sha256
+          zip anydesk-killer-agent-windows-amd64.zip \
+            anydesk-killer-agent-windows-amd64.exe \
+            install-startup.bat \
+            uninstall-startup.bat \
+            run-agent-hidden.vbs \
+            config.example.json
+          sha256sum \
+            anydesk-killer-agent-windows-amd64.exe \
+            anydesk-killer-agent-windows-amd64.zip \
+            install-startup.bat \
+            uninstall-startup.bat \
+            run-agent-hidden.vbs \
+            config.example.json \
+            > checksums.sha256
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
