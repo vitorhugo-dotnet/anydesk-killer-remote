@@ -261,6 +261,16 @@ Confirm that the private key exists and that `clientKey` points to the file with
 Get-ChildItem "$env:USERPROFILE\.ssh\anydesk-killer-redis*"
 ```
 
+#### `SSH knownHosts: CreateFile %USERPROFILE%\.known_hosts ...`
+
+The Go agent currently treats paths from `config.json` literally. It does not expand the CMD-style `%USERPROFILE%` placeholder. Use an absolute Windows path with escaped backslashes:
+
+```json
+"knownHosts": "C:\\Users\\vitor.hugo\\.ssh\\known_hosts"
+```
+
+The same rule applies to `clientKey` and `logFile`.
+
 #### `Permission denied (publickey)`
 
 Check ownership, permissions, and SSH logs:
@@ -288,6 +298,54 @@ sshd_config:     PermitOpen 127.0.0.1:6379
 config.json:     remoteHost 127.0.0.1 + remotePort 6379
 ```
 
+#### `transport failure ... wsarecv: ... conexão existente pelo host remoto`
+
+This Windows error can hide an SSH `direct-tcpip` rejection. The local tunnel listener may be open while the SSH server refuses the remote destination because `authorized_keys`, the effective `sshd_config`, and `config.json` do not permit the same literal `host:port`.
+
+First verify Redis from both the container and the VPS host:
+
+```bash
+docker exec redis redis-cli PING
+docker run --rm --network host redis:7-alpine \
+  redis-cli -h 127.0.0.1 -p 6379 PING
+sudo ss -lntp | grep ':6379'
+```
+
+Expected results are two `PONG` responses and a listener bound only to `127.0.0.1:6379`.
+
+Then inspect every SSH restriction:
+
+```bash
+sudo cat /home/remote-agent/.ssh/authorized_keys
+
+sudo grep -RniE \
+  'Match|PermitOpen|AllowTcpForwarding|DisableForwarding|ForceCommand' \
+  /etc/ssh/sshd_config /etc/ssh/sshd_config.d
+
+sudo sshd -T \
+  -C user=remote-agent,host=localhost,addr=127.0.0.1 \
+  | grep -E 'allowtcpforwarding|permitopen|disableforwarding|forcecommand'
+```
+
+All three destinations must be identical:
+
+```text
+authorized_keys: permitopen="127.0.0.1:6379"
+sshd_config:     PermitOpen 127.0.0.1:6379
+config.json:     remoteHost 127.0.0.1 + remotePort 6379
+```
+
+Values such as `redis:6379`, `172.0.0.1:6379`, and `127.0.0.1:6379` are different to OpenSSH even when they eventually reach the same Redis instance.
+
+After correcting `authorized_keys` or `sshd_config`, validate and reload OpenSSH:
+
+```bash
+sudo sshd -t
+sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload sshd
+```
+
+Close existing SSH tunnels and restart the agent. Existing authenticated sessions may continue using the restrictions that were active when they connected.
+
 #### `connect failed: Connection refused`
 
 SSH accepted the tunnel, but Redis is not reachable from the SSH server:
@@ -298,10 +356,20 @@ docker compose ps redis
 docker compose logs --tail=100 redis
 ```
 
+When Redis runs in Docker and the SSH daemon runs on the host, publish Redis only on loopback:
+
+```yaml
+ports:
+  - "127.0.0.1:6379:6379"
+```
+
+A container shown only as `6379/tcp` is not published to the host. The expected `docker ps` output contains `127.0.0.1:6379->6379/tcp`. Never publish it as `0.0.0.0:6379:6379`.
+
 ### Official references
 
 - [OpenSSH `sshd(8)`](https://man.openbsd.org/sshd.8)
 - [OpenSSH `sshd_config(5)`](https://man.openbsd.org/sshd_config)
+- [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
 - [Ubuntu `adduser(8)`](https://manpages.ubuntu.com/manpages/noble/man8/adduser.8.html)
 
 ## Python MVP agent
