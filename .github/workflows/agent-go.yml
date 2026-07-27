@@ -21,7 +21,7 @@ jobs:
           go-version: "1.24.x"
           cache: false
       - name: Download Go modules
-        run: go mod download
+        run: go mod download all
       - name: Verify Go modules
         run: go mod verify
       - run: go vet ./...
@@ -51,7 +51,7 @@ jobs:
           go-version: "1.24.x"
           cache: false
       - name: Download Go modules
-        run: go mod download
+        run: go mod download all
       - run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/anydesk-killer-agent-windows-amd64.exe .
       - run: |
           cd ../dist
