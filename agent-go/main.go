@@ -53,11 +53,14 @@ type command struct {
 	Args          json.RawMessage `json:"args"`
 	RequestedAt   time.Time       `json:"requestedAt"`
 	ExpiresAt     time.Time       `json:"expiresAt"`
+	ReopenAnyDesk bool            `json:"-"`
 }
 
 type outcome struct {
-	Matched     int `json:"matched"`
-	ForceKilled int `json:"forceKilled"`
+	Matched         int  `json:"matched"`
+	ForceKilled     int  `json:"forceKilled"`
+	ReopenAttempted bool `json:"reopenAttempted"`
+	Reopened        bool `json:"reopened"`
 }
 
 type commandRunner func(string, ...string) (string, error)
@@ -118,7 +121,18 @@ func validateCommand(raw, machineID string, now time.Time) (command, error) {
 	if c.Action != allowedAction {
 		return command{}, errors.New("action is not allowed")
 	}
-	if string(c.Args) != "{}" {
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(c.Args, &args); err != nil {
+		return command{}, errors.New("arguments must be an object")
+	}
+	if len(args) > 1 {
+		return command{}, errors.New("arguments are not allowed for this action")
+	}
+	if raw, ok := args["reopenAnyDesk"]; ok {
+		if err := json.Unmarshal(raw, &c.ReopenAnyDesk); err != nil {
+			return command{}, errors.New("reopenAnyDesk must be a boolean")
+		}
+	} else if len(args) != 0 {
 		return command{}, errors.New("arguments are not allowed for this action")
 	}
 	if c.RequestedAt.Location() != time.UTC || c.ExpiresAt.Location() != time.UTC {
@@ -145,6 +159,21 @@ func killAnyDesk(run commandRunner, tasklistOutput string) (outcome, error) {
 		return outcome{}, fmt.Errorf("taskkill AnyDesk.exe: %w", err)
 	}
 	return outcome{Matched: matched, ForceKilled: matched}, nil
+}
+
+func reopenAnyDesk() bool {
+	candidates := []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "AnyDesk", "AnyDesk.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "AnyDesk", "AnyDesk.exe"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "AnyDesk", "AnyDesk.exe"),
+	}
+	for _, candidate := range candidates {
+		if candidate == "" { continue }
+		if _, err := os.Stat(candidate); err == nil {
+			return exec.Command(candidate).Start() == nil
+		}
+	}
+	return false
 }
 
 func executeKill() (outcome, error) {
@@ -250,6 +279,10 @@ func consume(ctx context.Context, c config, logger *log.Logger) error {
 		result, err := executeKill()
 		if err != nil {
 			return err
+		}
+		result.ReopenAttempted = cmd.ReopenAnyDesk && result.Matched > 0
+		if result.ReopenAttempted {
+			result.Reopened = reopenAnyDesk()
 		}
 		payload, _ := json.Marshal(map[string]any{"commandId": cmd.CommandID, "correlationId": cmd.CorrelationID, "target": c.MachineID, "status": "SUCCEEDED", "completedAt": time.Now().UTC(), "outcome": result})
 		if err := redisClient.LPush(ctx, queue(c.MachineID, "results"), payload).Err(); err != nil {
