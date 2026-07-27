@@ -26,6 +26,284 @@ The executable accepts only an unexpired, version-1 `KILL_ANYDESK` envelope targ
 
 To publish a new binary, push a tag such as `v1.0.0`. The Release includes a ZIP and its SHA-256 checksum. Normal pushes and pull requests only run validation/build and upload a temporary Actions artifact.
 
+## Restricted SSH access to Redis
+
+The SSH account used by the agent must exist only to open a local TCP tunnel to Redis. It must not have password access, an interactive shell, command execution, SFTP/SCP, reverse forwarding, X11 forwarding, or SSH-agent forwarding.
+
+The examples below assume:
+
+- Ubuntu or Debian on the VPS;
+- OpenSSH listening on the VPS;
+- Redis reachable from the SSH server at `127.0.0.1:6379`;
+- the Windows machine ID is `jcpc38`.
+
+If Redis is reachable through another hostname, replace `127.0.0.1` everywhere. The value must be identical in `authorized_keys`, `sshd_config`, and `config.json`; OpenSSH compares the permitted destination literally.
+
+### 1. Keep Redis private
+
+When Redis runs with Docker Compose, publish it only on loopback:
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+```
+
+Apply and verify:
+
+```bash
+docker compose up -d redis
+nc -vz 127.0.0.1 6379
+```
+
+Do not publish Redis as `0.0.0.0:6379:6379`.
+
+### 2. Create the `remote-agent` user
+
+```bash
+sudo adduser --disabled-password --gecos "" remote-agent
+sudo usermod --shell /usr/sbin/nologin remote-agent
+```
+
+Do not add this user to `sudo`, `docker`, or other privileged groups.
+
+Create its SSH directory:
+
+```bash
+sudo install -d -m 700 -o remote-agent -g remote-agent /home/remote-agent/.ssh
+sudo touch /home/remote-agent/.ssh/authorized_keys
+sudo chown remote-agent:remote-agent /home/remote-agent/.ssh/authorized_keys
+sudo chmod 600 /home/remote-agent/.ssh/authorized_keys
+```
+
+### 3. Generate a dedicated key on Windows
+
+Run in PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+
+ssh-keygen -t ed25519 -a 100 `
+  -f "$env:USERPROFILE\.ssh\anydesk-killer-redis" `
+  -C "anydesk-killer-jcpc38"
+```
+
+This creates:
+
+```text
+C:\Users\vitor.hugo\.ssh\anydesk-killer-redis
+C:\Users\vitor.hugo\.ssh\anydesk-killer-redis.pub
+```
+
+The file without `.pub` is the private key used by the agent. Never copy it to the VPS or commit it to Git.
+
+Display the public key:
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\anydesk-killer-redis.pub"
+```
+
+### 4. Restrict the key to Redis forwarding
+
+On the VPS, edit:
+
+```bash
+sudo nano /home/remote-agent/.ssh/authorized_keys
+```
+
+Add the public key as one line, prefixed with these options:
+
+```text
+restrict,port-forwarding,permitopen="127.0.0.1:6379" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... anydesk-killer-jcpc38
+```
+
+Then restore ownership and permissions:
+
+```bash
+sudo chown remote-agent:remote-agent /home/remote-agent/.ssh/authorized_keys
+sudo chmod 600 /home/remote-agent/.ssh/authorized_keys
+```
+
+`restrict` disables forwarding and other SSH features by default. `port-forwarding` re-enables forwarding for this key, while `permitopen` restricts the reachable destination to Redis. The server configuration below additionally permits only local forwarding.
+
+### 5. Restrict the user in OpenSSH
+
+Append this block to `/etc/ssh/sshd_config`:
+
+```text
+Match User remote-agent
+    PubkeyAuthentication yes
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    AuthenticationMethods publickey
+
+    AllowTcpForwarding local
+    AllowStreamLocalForwarding no
+    PermitOpen 127.0.0.1:6379
+    PermitListen none
+
+    PermitTTY no
+    X11Forwarding no
+    AllowAgentForwarding no
+    PermitUserRC no
+    MaxSessions 0
+```
+
+`MaxSessions 0` blocks shell, login, command, and subsystem sessions while still allowing forwarding. `AllowTcpForwarding local` blocks reverse tunnels, and `PermitOpen` limits the only allowed destination.
+
+Validate before reloading OpenSSH:
+
+```bash
+sudo sshd -t
+sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload sshd
+```
+
+Inspect the effective configuration:
+
+```bash
+sudo sshd -T \
+  -C user=remote-agent,host=ssh.hugojava.dev,addr=127.0.0.1 \
+  | grep -E 'authenticationmethods|allowtcpforwarding|allowstreamlocalforwarding|permitopen|permitlisten|permittty|maxsessions'
+```
+
+### 6. Register and verify `known_hosts`
+
+On the VPS, display the host-key fingerprint:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+On Windows, collect the public host key:
+
+```powershell
+ssh-keyscan -p 2222 ssh.hugojava.dev | Out-File `
+  -Encoding ascii `
+  -Append "$env:USERPROFILE\.ssh\known_hosts"
+```
+
+Compare the collected key with the fingerprint obtained directly from the VPS before trusting it. `ssh-keyscan` alone does not authenticate the server.
+
+### 7. Configure the agent
+
+Example `config.json`:
+
+```json
+{
+  "machineId": "jcpc38",
+  "ssh": {
+    "host": "ssh.hugojava.dev",
+    "port": 2222,
+    "username": "remote-agent",
+    "clientKey": "C:\\Users\\vitor.hugo\\.ssh\\anydesk-killer-redis",
+    "knownHosts": "C:\\Users\\vitor.hugo\\.ssh\\known_hosts"
+  },
+  "redis": {
+    "remoteHost": "127.0.0.1",
+    "remotePort": 6379
+  },
+  "logFile": "C:\\Users\\vitor.hugo\\Desktop\\agent.log"
+}
+```
+
+`clientKey` must reference the private key and must not end in `.pub`.
+
+### 8. Test the tunnel manually
+
+Open the tunnel from Windows:
+
+```powershell
+ssh -N `
+  -L 6380:127.0.0.1:6379 `
+  -i "$env:USERPROFILE\.ssh\anydesk-killer-redis" `
+  -p 2222 `
+  remote-agent@ssh.hugojava.dev
+```
+
+From another terminal, test Redis if `redis-cli` is installed:
+
+```powershell
+redis-cli -h 127.0.0.1 -p 6380 ping
+```
+
+Expected result:
+
+```text
+PONG
+```
+
+Confirm that command execution is blocked:
+
+```powershell
+ssh `
+  -i "$env:USERPROFILE\.ssh\anydesk-killer-redis" `
+  -p 2222 `
+  remote-agent@ssh.hugojava.dev "id"
+```
+
+The command must fail because the account cannot create SSH sessions.
+
+Finally, start the agent:
+
+```powershell
+.\anydesk-killer-agent-windows-amd64.exe --config .\config.json
+```
+
+### Troubleshooting
+
+#### `SSH clientKey: CreateFile ... O sistema não pode encontrar o arquivo especificado`
+
+Confirm that the private key exists and that `clientKey` points to the file without `.pub`:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE\.ssh\anydesk-killer-redis*"
+```
+
+#### `Permission denied (publickey)`
+
+Check ownership, permissions, and SSH logs:
+
+```bash
+sudo ls -ld /home/remote-agent/.ssh
+sudo ls -l /home/remote-agent/.ssh/authorized_keys
+sudo journalctl -u ssh -f
+```
+
+Expected permissions:
+
+```text
+/home/remote-agent/.ssh                  700
+/home/remote-agent/.ssh/authorized_keys 600
+```
+
+#### `administratively prohibited: open failed`
+
+The requested destination does not match `permitopen` or `PermitOpen`. Check all three values:
+
+```text
+authorized_keys: permitopen="127.0.0.1:6379"
+sshd_config:     PermitOpen 127.0.0.1:6379
+config.json:     remoteHost 127.0.0.1 + remotePort 6379
+```
+
+#### `connect failed: Connection refused`
+
+SSH accepted the tunnel, but Redis is not reachable from the SSH server:
+
+```bash
+nc -vz 127.0.0.1 6379
+docker compose ps redis
+docker compose logs --tail=100 redis
+```
+
+### Official references
+
+- [OpenSSH `sshd(8)`](https://man.openbsd.org/sshd.8)
+- [OpenSSH `sshd_config(5)`](https://man.openbsd.org/sshd_config)
+- [Ubuntu `adduser(8)`](https://manpages.ubuntu.com/manpages/noble/man8/adduser.8.html)
+
 ## Python MVP agent
 
 1. Create a restricted SSH user on the VPS and generate a dedicated key pair.
