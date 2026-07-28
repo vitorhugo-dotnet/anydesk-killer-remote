@@ -201,6 +201,7 @@ Example `config.json`:
 ```json
 {
   "machineId": "jcpc38",
+  "anyDeskExecutablePath": "C:\\\\Program Files (x86)\\\\AnyDesk\\\\AnyDesk.exe",
   "ssh": {
     "host": "ssh.hugojava.dev",
     "port": 2222,
@@ -216,7 +217,7 @@ Example `config.json`:
 }
 ```
 
-`clientKey` must reference the private key and must not end in `.pub`. `knownHosts` must reference the `known_hosts` file itself, not the `.ssh` directory.
+`clientKey` must reference the private key and must not end in `.pub`. `knownHosts` must reference the `known_hosts` file itself, not the `.ssh` directory. `anyDeskExecutablePath` is optional: when provided, it is the first executable considered after a successful kill; if the file is absent or fails to launch, the agent falls back to the standard AnyDesk locations. Use a literal absolute path; environment variables are not expanded.
 
 ### 8. Test the tunnel manually
 
