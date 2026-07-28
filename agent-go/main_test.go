@@ -22,3 +22,13 @@ func TestRedisOptionsDefaultsToDatabaseZero(t *testing.T) {
 		t.Fatalf("expected Redis database 0, got %d", options.DB)
 	}
 }
+
+func TestAnyDeskExecutableCandidatesPrioritizeConfiguredPath(t *testing.T) {
+	configured := `E:\\Apps\\AnyDesk\\AnyDesk.exe`
+
+	candidates := anyDeskExecutableCandidates(configured)
+
+	if candidates[0] != configured {
+		t.Fatalf("expected configured executable first, got %q", candidates[0])
+	}
+}
