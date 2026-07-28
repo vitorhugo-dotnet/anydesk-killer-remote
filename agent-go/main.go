@@ -42,6 +42,7 @@ type config struct {
 		Database   int    `json:"database"`
 	} `json:"redis"`
 	LogFile string `json:"logFile"`
+	AnyDeskExecutablePath string `json:"anyDeskExecutablePath"`
 }
 
 type command struct {
@@ -161,12 +162,20 @@ func killAnyDesk(run commandRunner, tasklistOutput string) (outcome, error) {
 	return outcome{Matched: matched, ForceKilled: matched}, nil
 }
 
-func reopenAnyDesk() bool {
-	candidates := []string{
+func anyDeskExecutableCandidates(customPath string) []string {
+	candidates := make([]string, 0, 4)
+	if customPath != "" {
+		candidates = append(candidates, customPath)
+	}
+	return append(candidates,
 		filepath.Join(os.Getenv("ProgramFiles"), "AnyDesk", "AnyDesk.exe"),
 		filepath.Join(os.Getenv("ProgramFiles(x86)"), "AnyDesk", "AnyDesk.exe"),
 		filepath.Join(os.Getenv("LOCALAPPDATA"), "AnyDesk", "AnyDesk.exe"),
-	}
+	)
+}
+
+func reopenAnyDesk(customPath string) bool {
+	candidates := anyDeskExecutableCandidates(customPath)
 	for _, candidate := range candidates {
 		if candidate == "" { continue }
 		if _, err := os.Stat(candidate); err == nil {
@@ -282,7 +291,7 @@ func consume(ctx context.Context, c config, logger *log.Logger) error {
 		}
 		result.ReopenAttempted = cmd.ReopenAnyDesk && result.Matched > 0
 		if result.ReopenAttempted {
-			result.Reopened = reopenAnyDesk()
+			result.Reopened = reopenAnyDesk(c.AnyDeskExecutablePath)
 		}
 		payload, _ := json.Marshal(map[string]any{"commandId": cmd.CommandID, "correlationId": cmd.CorrelationID, "target": c.MachineID, "status": "SUCCEEDED", "completedAt": time.Now().UTC(), "outcome": result})
 		if err := redisClient.LPush(ctx, queue(c.MachineID, "results"), payload).Err(); err != nil {
