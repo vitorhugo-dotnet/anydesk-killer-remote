@@ -32,3 +32,21 @@ func TestAnyDeskExecutableCandidatesPrioritizeConfiguredPath(t *testing.T) {
 		t.Fatalf("expected configured executable first, got %q", candidates[0])
 	}
 }
+
+func TestApplyReopenAttemptsWhenAnyDeskWasAlreadyClosed(t *testing.T) {
+	called := false
+	result := applyReopen(outcome{Matched: 0}, true, `E:\\Apps\\AnyDesk\\AnyDesk.exe`, func(string) bool {
+		called = true
+		return true
+	})
+
+	if !called {
+		t.Fatal("expected AnyDesk opener to be called when reopening was requested")
+	}
+	if !result.ReopenAttempted {
+		t.Fatal("expected reopenAttempted to be true")
+	}
+	if !result.Reopened {
+		t.Fatal("expected reopened to report opener success")
+	}
+}
