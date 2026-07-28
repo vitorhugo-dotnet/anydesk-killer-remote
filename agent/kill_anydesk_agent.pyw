@@ -32,6 +32,7 @@ class Config:
     redis_remote_host: str
     redis_remote_port: int
     log_file: Path
+    anydesk_executable_path: Path | None
 
     @property
     def command_queue(self) -> str:
@@ -52,6 +53,9 @@ def load_config(path: Path) -> Config:
         redis_remote_host=redis.get("remoteHost", "127.0.0.1"),
         redis_remote_port=int(redis.get("remotePort", 6379)),
         log_file=Path(raw.get("logFile", "logs/anydesk-agent.log")),
+        anydesk_executable_path=Path(raw["anyDeskExecutablePath"])
+        if raw.get("anyDeskExecutablePath")
+        else None,
     )
     if not config.machine_id or not config.ssh_host or not config.ssh_username:
         raise ValueError("machineId and SSH host/username are required")
@@ -134,13 +138,18 @@ def kill_anydesk() -> dict[str, int]:
     return {"matched": len(matched), "forceKilled": len(alive)}
 
 
-def reopen_anydesk() -> bool:
-    candidates = [
+def anydesk_executable_candidates(custom_path: Path | None) -> list[Path]:
+    candidates = [custom_path] if custom_path is not None else []
+    candidates.extend([
         Path(os.environ.get("ProgramFiles", r"C:\\Program Files")) / "AnyDesk" / "AnyDesk.exe",
         Path(os.environ.get("ProgramFiles(x86)", r"C:\\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
         Path(os.environ.get("LOCALAPPDATA", "")) / "AnyDesk" / "AnyDesk.exe",
-    ]
-    for executable in candidates:
+    ])
+    return candidates
+
+
+def reopen_anydesk(custom_path: Path | None) -> bool:
+    for executable in anydesk_executable_candidates(custom_path):
         if executable.is_file():
             subprocess.Popen([str(executable)], close_fds=True)
             return True
@@ -189,7 +198,7 @@ async def consume(config: Config, logger: logging.Logger) -> None:
                         outcome = kill_anydesk()
                         reopen_requested = command["args"].get("reopenAnyDesk", False)
                         outcome["reopenAttempted"] = reopen_requested and outcome["matched"] > 0
-                        outcome["reopened"] = reopen_anydesk() if outcome["reopenAttempted"] else False
+                        outcome["reopened"] = reopen_anydesk(config.anydesk_executable_path) if outcome["reopenAttempted"] else False
                         result = {
                             "commandId": command["commandId"],
                             "correlationId": command["correlationId"],
