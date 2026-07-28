@@ -141,8 +141,8 @@ def kill_anydesk() -> dict[str, int]:
 def anydesk_executable_candidates(custom_path: Path | None) -> list[Path]:
     candidates = [custom_path] if custom_path is not None else []
     candidates.extend([
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "AnyDesk" / "AnyDesk.exe",
-        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("ProgramFiles", r"C:\\Program Files")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
         Path(os.environ.get("LOCALAPPDATA", "")) / "AnyDesk" / "AnyDesk.exe",
     ])
     return candidates
