@@ -141,8 +141,8 @@ def kill_anydesk() -> dict[str, int]:
 def anydesk_executable_candidates(custom_path: Path | None) -> list[Path]:
     candidates = [custom_path] if custom_path is not None else []
     candidates.extend([
-        Path(os.environ.get("ProgramFiles", r"C:\\Program Files")) / "AnyDesk" / "AnyDesk.exe",
-        Path(os.environ.get("ProgramFiles(x86)", r"C:\\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "AnyDesk" / "AnyDesk.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "AnyDesk" / "AnyDesk.exe",
         Path(os.environ.get("LOCALAPPDATA", "")) / "AnyDesk" / "AnyDesk.exe",
     ])
     return candidates
@@ -197,8 +197,8 @@ async def consume(config: Config, logger: logging.Logger) -> None:
                         command = validate_command(raw, config.machine_id)
                         outcome = kill_anydesk()
                         reopen_requested = command["args"].get("reopenAnyDesk", False)
-                        outcome["reopenAttempted"] = reopen_requested and outcome["matched"] > 0
-                        outcome["reopened"] = reopen_anydesk(config.anydesk_executable_path) if outcome["reopenAttempted"] else False
+                        outcome["reopenAttempted"] = reopen_requested
+                        outcome["reopened"] = reopen_anydesk(config.anydesk_executable_path) if reopen_requested else False
                         result = {
                             "commandId": command["commandId"],
                             "correlationId": command["correlationId"],
